@@ -1,5 +1,5 @@
 
-name: MLOps Pipeline
+name: Tourism Package Prediction MLOps Pipeline
 
 on:
   push:
