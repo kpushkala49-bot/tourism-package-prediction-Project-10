@@ -4,7 +4,7 @@ from huggingface_hub import hf_hub_download
 import joblib
 
 # Download and load the trained model
-model_path = hf_hub_download(repo_id="<---repo id---->/tourism-package-prediction", filename="model.pkl")
+model_path = hf_hub_download(repo_id="Pushkala49/tourism-package-prediction", filename="model.pkl")
 model = joblib.load(model_path)
 
 # Streamlit UI
