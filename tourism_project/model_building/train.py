@@ -1,139 +1,430 @@
-# for data manipulation
+
+# ============================================================
+# Tourism Package Prediction - Model Training
+# ============================================================
+
+# Data manipulation
 import pandas as pd
+import os
+import joblib
+
+# Preprocessing
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import make_column_transformer
 from sklearn.pipeline import make_pipeline
-# for model training, tuning, and evaluation
+
+# Model training and tuning
 import xgboost as xgb
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-# for model serialization
-import joblib
-# for creating a folder
-import os
-# for hugging face space authentication to upload files
-from huggingface_hub import login, HfApi, create_repo
-from huggingface_hub.utils import RepositoryNotFoundError, HfHubHTTPError
+
+# Model evaluation
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    classification_report,
+    confusion_matrix
+)
+
+# Experiment tracking
 import mlflow
 
+
+# ============================================================
+# 1. MLflow Configuration
+# ============================================================
+
 mlflow.set_tracking_uri("http://localhost:5000")
-mlflow.set_experiment("mlops-training-experiment")
-
-api = HfApi()
+mlflow.set_experiment("tourism-package-prediction-experiment")
 
 
-Xtrain_path = "hf://datasets/<---repo id---->/play-store-revenue-analysis/Xtrain.csv"
-Xtest_path = "hf://datasets/<---repo id---->/play-store-revenue-analysis/Xtest.csv"
-ytrain_path = "hf://datasets/<---repo id---->/play-store-revenue-analysis/ytrain.csv"
-ytest_path = "hf://datasets/<---repo id---->/play-store-revenue-analysis/ytest.csv"
+# ============================================================
+# 2. Define Data Paths
+# ============================================================
+
+DATA_DIR = "tourism_project/model_building"
+
+Xtrain_path = os.path.join(DATA_DIR, "Xtrain.csv")
+Xtest_path = os.path.join(DATA_DIR, "Xtest.csv")
+ytrain_path = os.path.join(DATA_DIR, "ytrain.csv")
+ytest_path = os.path.join(DATA_DIR, "ytest.csv")
+
+
+# ============================================================
+# 3. Load Train and Test Data
+# ============================================================
+
+print("Loading training and testing data...")
 
 Xtrain = pd.read_csv(Xtrain_path)
 Xtest = pd.read_csv(Xtest_path)
 ytrain = pd.read_csv(ytrain_path)
 ytest = pd.read_csv(ytest_path)
 
+# Convert target DataFrames to 1-D Series
+ytrain = ytrain.squeeze()
+ytest = ytest.squeeze()
 
-# Define numeric and categorical features
+print("Data loaded successfully.")
+
+print("Xtrain shape:", Xtrain.shape)
+print("Xtest shape :", Xtest.shape)
+print("ytrain shape:", ytrain.shape)
+print("ytest shape :", ytest.shape)
+
+
+# ============================================================
+# 4. Define Numerical and Categorical Features
+# ============================================================
+
 numeric_features = [
-    'app_size_in_mb', 'price_in_usd', 'number_of_installs',
-    'average_screen_time', 'active_users',
-    'no_of_short_ads_per_hour', 'no_of_long_ads_per_hour'
+    "Age",
+    "CityTier",
+    "NumberOfPersonVisiting",
+    "PreferredPropertyStar",
+    "NumberOfTrips",
+    "Passport",
+    "OwnCar",
+    "NumberOfChildrenVisiting",
+    "MonthlyIncome",
+    "PitchSatisfactionScore",
+    "NumberOfFollowups",
+    "DurationOfPitch"
 ]
 
 categorical_features = [
-    'app_category', 'free_or_paid', 'content_rating', 'screentime_category'
+    "TypeofContact",
+    "Occupation",
+    "Gender",
+    "MaritalStatus",
+    "Designation",
+    "ProductPitched"
 ]
 
-# Preprocessor
+print("\nNumerical Features:")
+print(numeric_features)
+
+print("\nCategorical Features:")
+print(categorical_features)
+
+
+# ============================================================
+# 5. Create Preprocessing Pipeline
+# ============================================================
+
 preprocessor = make_column_transformer(
-    (StandardScaler(), numeric_features),
-    (OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    (
+        StandardScaler(),
+        numeric_features
+    ),
+    (
+        OneHotEncoder(handle_unknown="ignore"),
+        categorical_features
+    )
 )
 
-# Define base XGBoost Regressor
-xgb_model = xgb.XGBRegressor(random_state=42, n_jobs=-1)
 
-# Hyperparameter grid
+# ============================================================
+# 6. Define XGBoost Classification Model
+# ============================================================
+
+xgb_model = xgb.XGBClassifier(
+    objective="binary:logistic",
+    eval_metric="logloss",
+    random_state=42,
+    n_jobs=-1
+)
+
+
+# ============================================================
+# 7. Create Complete ML Pipeline
+# ============================================================
+
+model_pipeline = make_pipeline(
+    preprocessor,
+    xgb_model
+)
+
+
+# ============================================================
+# 8. Define Hyperparameter Grid
+# ============================================================
+
 param_grid = {
-    'xgbregressor__n_estimators': [50, 100, 150],
-    'xgbregressor__max_depth': [3, 5, 7],
-    'xgbregressor__learning_rate': [0.01, 0.05, 0.1],
-    'xgbregressor__subsample': [0.7, 0.8, 1.0],
-    'xgbregressor__colsample_bytree': [0.7, 0.8, 1.0],
-    'xgbregressor__reg_lambda': [0.1, 1, 10]
+    "xgbclassifier__n_estimators": [100, 200],
+    "xgbclassifier__max_depth": [3, 5],
+    "xgbclassifier__learning_rate": [0.05, 0.1],
+    "xgbclassifier__subsample": [0.8, 1.0],
+    "xgbclassifier__colsample_bytree": [0.8, 1.0]
 }
 
-# Pipeline
-model_pipeline = make_pipeline(preprocessor, xgb_model)
 
-with mlflow.start_run():
-    # Grid Search
-    grid_search = GridSearchCV(model_pipeline, param_grid, cv=3, n_jobs=-1, scoring='neg_mean_squared_error')
+# ============================================================
+# 9. Start MLflow Experiment
+# ============================================================
+
+with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
+
+    print("\nStarting GridSearchCV...")
+
+    # --------------------------------------------------------
+    # Hyperparameter tuning
+    # --------------------------------------------------------
+
+    grid_search = GridSearchCV(
+        estimator=model_pipeline,
+        param_grid=param_grid,
+        cv=3,
+        scoring="f1",
+        n_jobs=-1,
+        verbose=1
+    )
+
     grid_search.fit(Xtrain, ytrain)
 
-    # Log parameter sets
+    print("\nGrid Search completed successfully.")
+
+
+    # ========================================================
+    # 10. Log Tuned Parameter Sets
+    # ========================================================
+
     results = grid_search.cv_results_
-    for i in range(len(results['params'])):
-        param_set = results['params'][i]
-        mean_score = results['mean_test_score'][i]
 
-        with mlflow.start_run(nested=True):
+    for i in range(len(results["params"])):
+
+        param_set = results["params"][i]
+        mean_score = results["mean_test_score"][i]
+
+        with mlflow.start_run(
+            run_name=f"parameter_set_{i+1}",
+            nested=True
+        ):
+
             mlflow.log_params(param_set)
-            mlflow.log_metric("mean_neg_mse", mean_score)
 
-    # Best model
-    mlflow.log_params(grid_search.best_params_)
+            mlflow.log_metric(
+                "mean_cv_f1_score",
+                float(mean_score)
+            )
+
+
+    # ========================================================
+    # 11. Get Best Model
+    # ========================================================
+
     best_model = grid_search.best_estimator_
 
-    # Predictions
+    print("\nBest Parameters:")
+    print(grid_search.best_params_)
+
+    print(
+        "\nBest Cross Validation F1 Score:",
+        grid_search.best_score_
+    )
+
+    # Log best parameters
+    mlflow.log_params(grid_search.best_params_)
+
+    mlflow.log_metric(
+        "best_cv_f1_score",
+        float(grid_search.best_score_)
+    )
+
+
+    # ========================================================
+    # 12. Make Predictions
+    # ========================================================
+
     y_pred_train = best_model.predict(Xtrain)
     y_pred_test = best_model.predict(Xtest)
 
-    # Metrics
-    train_rmse = mean_squared_error(ytrain, y_pred_train, squared=False)
-    test_rmse = mean_squared_error(ytest, y_pred_test, squared=False)
+    y_prob_train = best_model.predict_proba(Xtrain)[:, 1]
+    y_prob_test = best_model.predict_proba(Xtest)[:, 1]
 
-    train_mae = mean_absolute_error(ytrain, y_pred_train)
-    test_mae = mean_absolute_error(ytest, y_pred_test)
 
-    train_r2 = r2_score(ytrain, y_pred_train)
-    test_r2 = r2_score(ytest, y_pred_test)
+    # ========================================================
+    # 13. Calculate Training Metrics
+    # ========================================================
 
-    # Log metrics
+    train_accuracy = accuracy_score(
+        ytrain,
+        y_pred_train
+    )
+
+    train_precision = precision_score(
+        ytrain,
+        y_pred_train,
+        zero_division=0
+    )
+
+    train_recall = recall_score(
+        ytrain,
+        y_pred_train,
+        zero_division=0
+    )
+
+    train_f1 = f1_score(
+        ytrain,
+        y_pred_train,
+        zero_division=0
+    )
+
+    train_roc_auc = roc_auc_score(
+        ytrain,
+        y_prob_train
+    )
+
+
+    # ========================================================
+    # 14. Calculate Test Metrics
+    # ========================================================
+
+    test_accuracy = accuracy_score(
+        ytest,
+        y_pred_test
+    )
+
+    test_precision = precision_score(
+        ytest,
+        y_pred_test,
+        zero_division=0
+    )
+
+    test_recall = recall_score(
+        ytest,
+        y_pred_test,
+        zero_division=0
+    )
+
+    test_f1 = f1_score(
+        ytest,
+        y_pred_test,
+        zero_division=0
+    )
+
+    test_roc_auc = roc_auc_score(
+        ytest,
+        y_prob_test
+    )
+
+
+    # ========================================================
+    # 15. Print Model Performance
+    # ========================================================
+
+    print("\n========================================")
+    print("TRAINING PERFORMANCE")
+    print("========================================")
+
+    print(f"Accuracy : {train_accuracy:.4f}")
+    print(f"Precision: {train_precision:.4f}")
+    print(f"Recall   : {train_recall:.4f}")
+    print(f"F1 Score : {train_f1:.4f}")
+    print(f"ROC-AUC  : {train_roc_auc:.4f}")
+
+
+    print("\n========================================")
+    print("TEST PERFORMANCE")
+    print("========================================")
+
+    print(f"Accuracy : {test_accuracy:.4f}")
+    print(f"Precision: {test_precision:.4f}")
+    print(f"Recall   : {test_recall:.4f}")
+    print(f"F1 Score : {test_f1:.4f}")
+    print(f"ROC-AUC  : {test_roc_auc:.4f}")
+
+
+    # ========================================================
+    # 16. Classification Report
+    # ========================================================
+
+    print("\nClassification Report:")
+    print(
+        classification_report(
+            ytest,
+            y_pred_test,
+            zero_division=0
+        )
+    )
+
+
+    # ========================================================
+    # 17. Confusion Matrix
+    # ========================================================
+
+    print("\nConfusion Matrix:")
+    print(
+        confusion_matrix(
+            ytest,
+            y_pred_test
+        )
+    )
+
+
+    # ========================================================
+    # 18. Log Evaluation Metrics to MLflow
+    # ========================================================
+
     mlflow.log_metrics({
-        "train_RMSE": train_rmse,
-        "test_RMSE": test_rmse,
-        "train_MAE": train_mae,
-        "test_MAE": test_mae,
-        "train_R2": train_r2,
-        "test_R2": test_r2
+
+        "train_accuracy": train_accuracy,
+        "train_precision": train_precision,
+        "train_recall": train_recall,
+        "train_f1": train_f1,
+        "train_roc_auc": train_roc_auc,
+
+        "test_accuracy": test_accuracy,
+        "test_precision": test_precision,
+        "test_recall": test_recall,
+        "test_f1": test_f1,
+        "test_roc_auc": test_roc_auc
+
     })
 
-    # Save the model locally
-    model_path = "best_playstore_revenue_model_v1.joblib"
-    joblib.dump(best_model, model_path)
 
-    # Log the model artifact
-    mlflow.log_artifact(model_path, artifact_path="model")
-    print(f"Model saved as artifact at: {model_path}")
+    # ========================================================
+    # 19. Save Best Model
+    # ========================================================
 
-    # Upload to Hugging Face
-    repo_id = "<---repo id---->/playstore_revenue_model"
-    repo_type = "model"
+    DEPLOYMENT_DIR = "tourism_project/deployment"
 
-    # Step 1: Check if the space exists
-    try:
-        api.repo_info(repo_id=repo_id, repo_type=repo_type)
-        print(f"Space '{repo_id}' already exists. Using it.")
-    except RepositoryNotFoundError:
-        print(f"Space '{repo_id}' not found. Creating new space...")
-        create_repo(repo_id=repo_id, repo_type=repo_type, private=False)
-        print(f"Space '{repo_id}' created.")
-
-    # create_repo("churn-model", repo_type="model", private=False)
-    api.upload_file(
-        path_or_fileobj="best_playstore_revenue_model_v1.joblib",
-        path_in_repo="best_playstore_revenue_model_v1.joblib",
-        repo_id=repo_id,
-        repo_type=repo_type,
+    os.makedirs(
+        DEPLOYMENT_DIR,
+        exist_ok=True
     )
+
+    model_path = os.path.join(
+        DEPLOYMENT_DIR,
+        "best_model.joblib"
+    )
+
+    joblib.dump(
+        best_model,
+        model_path
+    )
+
+    print(
+        f"\nBest model saved successfully at: {model_path}"
+    )
+
+
+    # ========================================================
+    # 20. Log Model as MLflow Artifact
+    # ========================================================
+
+    mlflow.log_artifact(
+        model_path,
+        artifact_path="model"
+    )
+
+    print(
+        "Model artifact logged successfully in MLflow."
+    )
+
+
+print("\n========================================")
+print("MODEL TRAINING COMPLETED SUCCESSFULLY")
+print("========================================")
