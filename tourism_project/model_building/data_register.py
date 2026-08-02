@@ -4,7 +4,7 @@ import os
 import sys
 
 # ---------------------------------------------------
-# Define dataset path
+# Defining dataset path
 # ---------------------------------------------------
 DATA_PATH = "tourism_project/data/tourism.csv"
 
@@ -35,21 +35,21 @@ EXPECTED_COLUMNS = [
 ]
 
 # ---------------------------------------------------
-# Check whether dataset exists
+# Checking whether dataset exists
 # ---------------------------------------------------
 if not os.path.exists(DATA_PATH):
     print(f"ERROR: Dataset not found at {DATA_PATH}")
     sys.exit(1)
 
 # ---------------------------------------------------
-# Load dataset
+# Loading dataset
 # ---------------------------------------------------
 df = pd.read_csv(DATA_PATH)
 
 print("Dataset loaded successfully.")
 
 # ---------------------------------------------------
-# Validate expected columns
+# Validating expected columns
 # ---------------------------------------------------
 missing_columns = [
     col for col in EXPECTED_COLUMNS
