@@ -32,17 +32,16 @@ from sklearn.metrics import (
 import mlflow
 
 
-# ============================================================
 # 1. MLflow Configuration
-# ============================================================
+
 
 mlflow.set_tracking_uri("http://localhost:5000")
 mlflow.set_experiment("tourism-package-prediction-experiment")
 
 
-# ============================================================
-# 2. Define Data Paths
-# ============================================================
+
+# 2. Defining Data Paths
+
 
 DATA_DIR = "tourism_project/model_building"
 
@@ -52,9 +51,8 @@ ytrain_path = os.path.join(DATA_DIR, "ytrain.csv")
 ytest_path = os.path.join(DATA_DIR, "ytest.csv")
 
 
-# ============================================================
-# 3. Load Train and Test Data
-# ============================================================
+# 3. Loading Train and Test Data
+
 
 print("Loading training and testing data...")
 
@@ -63,7 +61,7 @@ Xtest = pd.read_csv(Xtest_path)
 ytrain = pd.read_csv(ytrain_path)
 ytest = pd.read_csv(ytest_path)
 
-# Convert target DataFrames to 1-D Series
+# Converting target DataFrames to 1-D Series
 ytrain = ytrain.squeeze()
 ytest = ytest.squeeze()
 
@@ -75,9 +73,9 @@ print("ytrain shape:", ytrain.shape)
 print("ytest shape :", ytest.shape)
 
 
-# ============================================================
-# 4. Define Numerical and Categorical Features
-# ============================================================
+
+# 4. Defineing Numerical and Categorical Features
+
 
 numeric_features = [
     "Age",
@@ -110,9 +108,8 @@ print("\nCategorical Features:")
 print(categorical_features)
 
 
-# ============================================================
-# 5. Create Preprocessing Pipeline
-# ============================================================
+# 5. Creating Preprocessing Pipeline
+
 
 preprocessor = make_column_transformer(
     (
@@ -126,9 +123,8 @@ preprocessor = make_column_transformer(
 )
 
 
-# ============================================================
-# 6. Define XGBoost Classification Model
-# ============================================================
+# 6. Defineing XGBoost Classification Model
+
 
 xgb_model = xgb.XGBClassifier(
     objective="binary:logistic",
@@ -138,9 +134,9 @@ xgb_model = xgb.XGBClassifier(
 )
 
 
-# ============================================================
-# 7. Create Complete ML Pipeline
-# ============================================================
+
+# 7. Creating Complete ML Pipeline
+
 
 model_pipeline = make_pipeline(
     preprocessor,
@@ -148,9 +144,9 @@ model_pipeline = make_pipeline(
 )
 
 
-# ============================================================
-# 8. Define Hyperparameter Grid
-# ============================================================
+
+# 8. Defineing Hyperparameter Grid
+
 
 param_grid = {
     "xgbclassifier__n_estimators": [100, 200],
@@ -161,18 +157,16 @@ param_grid = {
 }
 
 
-# ============================================================
-# 9. Start MLflow Experiment
-# ============================================================
+# 9. Starting MLflow Experiment
+
 
 with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
 
     print("\nStarting GridSearchCV...")
 
-    # --------------------------------------------------------
+ 
     # Hyperparameter tuning
-    # --------------------------------------------------------
-
+  
     grid_search = GridSearchCV(
         estimator=model_pipeline,
         param_grid=param_grid,
@@ -187,9 +181,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     print("\nGrid Search completed successfully.")
 
 
-    # ========================================================
+ 
     # 10. Log Tuned Parameter Sets
-    # ========================================================
+
 
     results = grid_search.cv_results_
 
@@ -211,9 +205,8 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
             )
 
 
-    # ========================================================
     # 11. Get Best Model
-    # ========================================================
+
 
     best_model = grid_search.best_estimator_
 
@@ -234,9 +227,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     )
 
 
-    # ========================================================
-    # 12. Make Predictions
-    # ========================================================
+
+    # 12. Making Predictions
+ 
 
     y_pred_train = best_model.predict(Xtrain)
     y_pred_test = best_model.predict(Xtest)
@@ -245,9 +238,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     y_prob_test = best_model.predict_proba(Xtest)[:, 1]
 
 
-    # ========================================================
-    # 13. Calculate Training Metrics
-    # ========================================================
+
+    # 13. Calculating Training Metrics
+
 
     train_accuracy = accuracy_score(
         ytrain,
@@ -279,7 +272,7 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
 
 
     # ========================================================
-    # 14. Calculate Test Metrics
+    # 14. Calculating Test Metrics
     # ========================================================
 
     test_accuracy = accuracy_score(
@@ -311,9 +304,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     )
 
 
-    # ========================================================
+
     # 15. Print Model Performance
-    # ========================================================
+
 
     print("\n========================================")
     print("TRAINING PERFORMANCE")
@@ -337,9 +330,8 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     print(f"ROC-AUC  : {test_roc_auc:.4f}")
 
 
-    # ========================================================
     # 16. Classification Report
-    # ========================================================
+
 
     print("\nClassification Report:")
     print(
@@ -351,9 +343,8 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     )
 
 
-    # ========================================================
     # 17. Confusion Matrix
-    # ========================================================
+
 
     print("\nConfusion Matrix:")
     print(
@@ -364,9 +355,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     )
 
 
-    # ========================================================
+
     # 18. Log Evaluation Metrics to MLflow
-    # ========================================================
+
 
     mlflow.log_metrics({
 
@@ -385,9 +376,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     })
 
 
-    # ========================================================
+
     # 19. Save Best Model
-    # ========================================================
+
 
     DEPLOYMENT_DIR = "tourism_project/deployment"
 
@@ -411,9 +402,9 @@ with mlflow.start_run(run_name="XGBoost_Tourism_Classification"):
     )
 
 
-    # ========================================================
+
     # 20. Log Model as MLflow Artifact
-    # ========================================================
+
 
     mlflow.log_artifact(
         model_path,
